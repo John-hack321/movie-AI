@@ -1,8 +1,48 @@
+/**
+ * POST /api/identify
+ *
+ * Identifies a movie from a video URL or text description using OpenAI GPT-4o.
+ * The OPENAI_API_KEY environment variable must be set on the server.
+ *
+ * Body (one of the two is required):
+ *   { url: string }           — video URL shared from TikTok or social media
+ *   { description: string }   — text description of the movie scene
+ *
+ * Response:
+ *   { title, year?, genre?, description?, confidence }
+ */
+
 import { Router } from "express";
 
 const router = Router();
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+
+type OpenAIResponse = {
+  choices?: Array<{ message?: { content?: string } }>;
+};
+
+type ParsedMovieResult = {
+  title?: string;
+  year?: string;
+  genre?: string;
+  description?: string;
+  confidence?: string;
+};
+
+function parseJsonSafely(content: string): ParsedMovieResult | null {
+  try {
+    return JSON.parse(content.trim());
+  } catch {
+    const match = content.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {}
+    }
+    return null;
+  }
+}
 
 router.post("/identify", async (req, res) => {
   const { url, description } = req.body as { url?: string; description?: string };
@@ -15,46 +55,42 @@ router.post("/identify", async (req, res) => {
   const apiKey = process.env["OPENAI_API_KEY"];
   if (!apiKey) {
     req.log.error("OPENAI_API_KEY environment variable is not set");
-    res.status(500).json({ error: "Movie identification service is not configured" });
+    res
+      .status(500)
+      .json({ error: "Movie identification service is not configured on the server" });
     return;
   }
 
-  let prompt: string;
-
-  if (url) {
-    prompt = `You are a world-class movie identification expert with encyclopedic knowledge of films, TV shows, and viral content from TikTok and social media.
+  const prompt = url
+    ? `You are a world-class movie identification expert with encyclopedic knowledge of films, TV shows, and viral content from TikTok and social media.
 
 A user shared this video URL: "${url}"
 
-Analyze the URL structure, domain, and any embedded metadata. Many TikTok movie clips have descriptive slugs or captions that hint at the movie. Use every available clue.
+Analyze the URL structure, domain, path segments, and any embedded metadata or slugs. TikTok movie explainer clips often contain movie names or scene keywords in their captions or creator handles. Use all available clues.
 
-Also consider: this is a "movie explainer" type TikTok — these videos typically recap or analyze popular movies. Common movies that go viral on TikTok include: popular blockbusters, cult classics, horror films, and Oscar contenders.
+Return a JSON object with these exact keys:
+- "title": The movie or TV show name (be specific and accurate)
+- "year": Release year as a string (e.g. "2019", or "2019–2023" for a series)
+- "genre": Genre(s) joined with " · " (e.g. "Sci-Fi · Thriller")
+- "description": 1–2 sentence synopsis of the movie/show
+- "confidence": One of "high", "medium", or "low" — your certainty of the match
 
-Return a JSON object with:
-- "title": The movie or TV show name (be specific)
-- "year": Release year as a string (e.g. "2019")
-- "genre": Genre(s) (e.g. "Sci-Fi · Thriller")
-- "description": 1-2 sentence synopsis
-- "confidence": "high", "medium", or "low" based on certainty
+If you cannot identify anything: {"title": "Unknown Movie", "confidence": "low", "description": "Could not identify the movie from this content."}
 
-If you cannot identify: {"title": "Unknown Movie", "confidence": "low", "description": "Could not identify the movie from this content."}
-
-Return ONLY valid JSON, no markdown, no explanation.`;
-  } else {
-    prompt = `You are a world-class movie identification expert.
+Return ONLY valid JSON. No markdown fences, no explanation outside the JSON.`
+    : `You are a world-class movie identification expert.
 
 A user wants to identify a movie based on this description:
 "${description}"
 
-Identify the most likely movie or TV show. Return a JSON object with:
+Identify the most likely movie or TV show. Return a JSON object with these exact keys:
 - "title": The movie or TV show name
 - "year": Release year as a string
-- "genre": Genre(s)
-- "description": 1-2 sentence synopsis
-- "confidence": "high", "medium", or "low"
+- "genre": Genre(s) joined with " · "
+- "description": 1–2 sentence synopsis
+- "confidence": One of "high", "medium", or "low"
 
-Return ONLY valid JSON.`;
-  }
+Return ONLY valid JSON. No markdown fences, no explanation.`;
 
   try {
     const openaiRes = await fetch(OPENAI_API_URL, {
@@ -74,46 +110,38 @@ Return ONLY valid JSON.`;
     if (!openaiRes.ok) {
       const errText = await openaiRes.text();
       req.log.error({ status: openaiRes.status, body: errText }, "OpenAI API error");
-      res.status(500).json({ error: "Failed to identify movie" });
+      if (openaiRes.status === 401) {
+        res.status(500).json({ error: "Invalid OpenAI API key on server" });
+      } else {
+        res.status(500).json({ error: "Failed to contact identification service" });
+      }
       return;
     }
 
-    const data = await openaiRes.json() as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
+    const data = (await openaiRes.json()) as OpenAIResponse;
     const content = data.choices?.[0]?.message?.content ?? "";
 
-    let parsed: {
-      title?: string;
-      year?: string;
-      genre?: string;
-      description?: string;
-      confidence?: string;
-    };
-
-    try {
-      parsed = JSON.parse(content.trim());
-    } catch {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        parsed = JSON.parse(match[0]);
-      } else {
-        req.log.error({ content }, "Could not parse OpenAI response");
-        res.status(500).json({ error: "Could not parse identification result" });
-        return;
-      }
+    const parsed = parseJsonSafely(content);
+    if (!parsed) {
+      req.log.error({ content }, "Could not parse OpenAI response");
+      res.status(500).json({ error: "Could not parse identification result" });
+      return;
     }
+
+    const confidence = ["high", "medium", "low"].includes(parsed.confidence ?? "")
+      ? parsed.confidence
+      : "low";
 
     res.json({
       title: parsed.title ?? "Unknown Movie",
-      year: parsed.year,
-      genre: parsed.genre,
-      description: parsed.description,
-      confidence: parsed.confidence ?? "low",
+      year: parsed.year ?? undefined,
+      genre: parsed.genre ?? undefined,
+      description: parsed.description ?? undefined,
+      confidence,
     });
   } catch (err) {
     req.log.error({ err }, "Error calling OpenAI");
-    res.status(500).json({ error: "Movie identification failed" });
+    res.status(500).json({ error: "Movie identification failed. Please try again." });
   }
 });
 

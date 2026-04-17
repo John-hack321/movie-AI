@@ -1,4 +1,28 @@
-import { Account, Client, Databases, ID, Query } from "react-native-appwrite";
+/**
+ * Appwrite service — handles cloud database sync for movie history.
+ *
+ * All functions are safe to call even when Appwrite is not configured;
+ * they simply no-op and fall back to local AsyncStorage.
+ *
+ * Configuration: set these env vars in your local .env or Expo's app.json:
+ *   EXPO_PUBLIC_APPWRITE_PROJECT_ID
+ *   EXPO_PUBLIC_APPWRITE_DATABASE_ID
+ *   EXPO_PUBLIC_APPWRITE_HISTORY_COLLECTION_ID
+ *   EXPO_PUBLIC_APPWRITE_ENDPOINT  (optional, defaults to cloud.appwrite.io/v1)
+ *
+ * Appwrite collection schema (create these attributes in your Appwrite console):
+ *   userId       — string, required
+ *   movieId      — string, required
+ *   title        — string, required
+ *   year         — string, optional
+ *   genre        — string, optional
+ *   description  — string, optional
+ *   confidence   — string (enum: high | medium | low), required
+ *   sourceUrl    — string, optional
+ *   identifiedAt — datetime, required
+ */
+
+import { Client, Databases, ID, Query } from "react-native-appwrite";
 
 import {
   APPWRITE_DATABASE_ID,
@@ -9,57 +33,36 @@ import {
 import type { MovieResult } from "@/types/movie";
 
 let client: Client | null = null;
-let account: Account | null = null;
 let databases: Databases | null = null;
 
-function getClient() {
+function getServices(): { databases: Databases } | null {
   if (!APPWRITE_PROJECT_ID) return null;
   if (!client) {
     client = new Client()
       .setEndpoint(APPWRITE_ENDPOINT)
       .setProject(APPWRITE_PROJECT_ID);
-    account = new Account(client);
     databases = new Databases(client);
   }
-  return { client, account: account!, databases: databases! };
+  return { databases: databases! };
 }
 
 export function isAppwriteConfigured(): boolean {
-  return Boolean(APPWRITE_PROJECT_ID && APPWRITE_DATABASE_ID && APPWRITE_HISTORY_COLLECTION_ID);
+  return Boolean(
+    APPWRITE_PROJECT_ID &&
+    APPWRITE_DATABASE_ID &&
+    APPWRITE_HISTORY_COLLECTION_ID
+  );
 }
 
-export async function createGoogleSession(idToken: string, accessToken: string) {
-  const services = getClient();
-  if (!services) throw new Error("Appwrite not configured");
-  return services.account.createOAuth2Token("google" as never, idToken, accessToken);
-}
-
-export async function createEmailSession(idToken: string) {
-  const services = getClient();
-  if (!services) throw new Error("Appwrite not configured");
-  return services.account.createJWT();
-}
-
-export async function getAppwriteAccount() {
-  const services = getClient();
-  if (!services) return null;
-  try {
-    return await services.account.get();
-  } catch {
-    return null;
-  }
-}
-
-export async function deleteSession() {
-  const services = getClient();
-  if (!services) return;
-  try {
-    await services.account.deleteSession("current");
-  } catch {}
-}
-
-export async function saveMovieToHistory(userId: string, movie: MovieResult) {
-  const services = getClient();
+/**
+ * Save a movie identification result to the user's Appwrite history collection.
+ * Silently no-ops if Appwrite is not configured.
+ */
+export async function saveMovieToHistory(
+  userId: string,
+  movie: MovieResult
+): Promise<void> {
+  const services = getServices();
   if (!services || !isAppwriteConfigured()) return;
   try {
     await services.databases.createDocument(
@@ -79,12 +82,16 @@ export async function saveMovieToHistory(userId: string, movie: MovieResult) {
       }
     );
   } catch (err) {
-    console.warn("Failed to save to Appwrite:", err);
+    console.warn("[Appwrite] Failed to save movie to history:", err);
   }
 }
 
+/**
+ * Fetch a user's movie history from Appwrite.
+ * Returns an empty array if Appwrite is not configured or the request fails.
+ */
 export async function fetchUserHistory(userId: string): Promise<MovieResult[]> {
-  const services = getClient();
+  const services = getServices();
   if (!services || !isAppwriteConfigured()) return [];
   try {
     const res = await services.databases.listDocuments(
@@ -97,17 +104,17 @@ export async function fetchUserHistory(userId: string): Promise<MovieResult[]> {
       ]
     );
     return res.documents.map((doc) => ({
-      id: doc.movieId as string,
-      title: doc.title as string,
-      year: (doc.year as string) || undefined,
-      genre: (doc.genre as string) || undefined,
-      description: (doc.description as string) || undefined,
-      confidence: doc.confidence as MovieResult["confidence"],
-      identifiedAt: new Date(doc.identifiedAt as string).getTime(),
-      sourceUrl: (doc.sourceUrl as string) || undefined,
+      id: doc["movieId"] as string,
+      title: doc["title"] as string,
+      year: (doc["year"] as string) || undefined,
+      genre: (doc["genre"] as string) || undefined,
+      description: (doc["description"] as string) || undefined,
+      confidence: doc["confidence"] as MovieResult["confidence"],
+      identifiedAt: new Date(doc["identifiedAt"] as string).getTime(),
+      sourceUrl: (doc["sourceUrl"] as string) || undefined,
     }));
   } catch (err) {
-    console.warn("Failed to fetch from Appwrite:", err);
+    console.warn("[Appwrite] Failed to fetch history:", err);
     return [];
   }
 }

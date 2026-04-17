@@ -5,7 +5,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   AppState,
   Easing,
@@ -29,7 +28,6 @@ import { identifyMovieFromText, identifyMovieFromUrl } from "@/services/identify
 import { saveMovieToHistory } from "@/services/appwrite";
 
 const TIKTOK_REGEX = /https?:\/\/(www\.)?(tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)\/\S+/i;
-const VIDEO_URL_REGEX = /https?:\/\/\S+\.(mp4|mov|avi|webm|m3u8)(\?[^\s]*)?/i;
 const ANY_URL_REGEX = /https?:\/\/\S+/i;
 
 export default function ScannerScreen() {
@@ -158,8 +156,7 @@ export default function ScannerScreen() {
 
       <LinearGradient
         colors={["#0C0C0F", "#141420", "#0C0C0F"]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}
       />
 
       {/* Center visualization */}
