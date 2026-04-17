@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "xNro4JZS3F7ToS0FgY-su"
+uri = "file://artifacts/movie-finder/assets/images/icon.png"
+type = "image"
+title = "cineid app icon"
