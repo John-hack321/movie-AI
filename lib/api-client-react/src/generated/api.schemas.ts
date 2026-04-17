@@ -8,3 +8,31 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface IdentifyRequest {
+  /** Video URL shared from TikTok or social media */
+  url?: string;
+  /** Text description of the movie scene */
+  description?: string;
+}
+
+export type IdentifyResponseConfidence =
+  (typeof IdentifyResponseConfidence)[keyof typeof IdentifyResponseConfidence];
+
+export const IdentifyResponseConfidence = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
+
+export interface IdentifyResponse {
+  title: string;
+  year?: string;
+  genre?: string;
+  description?: string;
+  confidence: IdentifyResponseConfidence;
+}
+
+export interface ErrorResponse {
+  error: string;
+}

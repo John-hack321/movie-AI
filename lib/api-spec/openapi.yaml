@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: identify
+    description: Movie identification
 paths:
   /healthz:
     get:
@@ -24,6 +26,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /identify:
+    post:
+      operationId: identifyMovie
+      tags: [identify]
+      summary: Identify a movie from a URL or description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdentifyRequest"
+      responses:
+        "200":
+          description: Movie identified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentifyResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +65,37 @@ components:
           type: string
       required:
         - status
-
+    IdentifyRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Video URL shared from TikTok or social media
+        description:
+          type: string
+          description: Text description of the movie scene
+      minProperties: 1
+    IdentifyResponse:
+      type: object
+      properties:
+        title:
+          type: string
+        year:
+          type: string
+        genre:
+          type: string
+        description:
+          type: string
+        confidence:
+          type: string
+          enum: [high, medium, low]
+      required:
+        - title
+        - confidence
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

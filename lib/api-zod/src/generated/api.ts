@@ -14,3 +14,25 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Identify a movie from a URL or description
+ */
+export const IdentifyMovieBody = zod.object({
+  url: zod
+    .string()
+    .optional()
+    .describe("Video URL shared from TikTok or social media"),
+  description: zod
+    .string()
+    .optional()
+    .describe("Text description of the movie scene"),
+});
+
+export const IdentifyMovieResponse = zod.object({
+  title: zod.string(),
+  year: zod.string().optional(),
+  genre: zod.string().optional(),
+  description: zod.string().optional(),
+  confidence: zod.enum(["high", "medium", "low"]),
+});

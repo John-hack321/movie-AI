@@ -5,18 +5,26 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ErrorResponse,
+  HealthStatus,
+  IdentifyRequest,
+  IdentifyResponse,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +107,89 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Identify a movie from a URL or description
+ */
+export const getIdentifyMovieUrl = () => {
+  return `/api/identify`;
+};
+
+export const identifyMovie = async (
+  identifyRequest: IdentifyRequest,
+  options?: RequestInit,
+): Promise<IdentifyResponse> => {
+  return customFetch<IdentifyResponse>(getIdentifyMovieUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(identifyRequest),
+  });
+};
+
+export const getIdentifyMovieMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identifyMovie>>,
+    TError,
+    { data: BodyType<IdentifyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identifyMovie>>,
+  TError,
+  { data: BodyType<IdentifyRequest> },
+  TContext
+> => {
+  const mutationKey = ["identifyMovie"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identifyMovie>>,
+    { data: BodyType<IdentifyRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identifyMovie(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentifyMovieMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identifyMovie>>
+>;
+export type IdentifyMovieMutationBody = BodyType<IdentifyRequest>;
+export type IdentifyMovieMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Identify a movie from a URL or description
+ */
+export const useIdentifyMovie = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identifyMovie>>,
+    TError,
+    { data: BodyType<IdentifyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof identifyMovie>>,
+  TError,
+  { data: BodyType<IdentifyRequest> },
+  TContext
+> => {
+  return useMutation(getIdentifyMovieMutationOptions(options));
+};
