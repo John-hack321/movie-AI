@@ -59,7 +59,10 @@
   },
   "dependencies": {
     "expo": "~54.0.33",
+    "expo-auth-session": "~7.0.10",
     "expo-clipboard": "^8.0.8",
+    "expo-crypto": "~15.0.8",
+    "expo-dev-client": "~6.0.20",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-appwrite": "^0.28.0"
