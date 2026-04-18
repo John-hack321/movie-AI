@@ -1,8 +1,10 @@
 /**
  * POST /api/identify
  *
- * Identifies a movie from a video URL or text description using OpenAI GPT-4o.
- * The OPENAI_API_KEY environment variable must be set on the server.
+ * Identifies a movie from a video URL or text description using Google Gemini.
+ * The GEMINI_API_KEY environment variable must be set on the server.
+ *
+ * Get your free API key at: https://aistudio.google.com/app/apikey
  *
  * Body (one of the two is required):
  *   { url: string }           — video URL shared from TikTok or social media
@@ -16,10 +18,16 @@ import { Router } from "express";
 
 const router = Router();
 
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-type OpenAIResponse = {
-  choices?: Array<{ message?: { content?: string } }>;
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+  error?: { message?: string; code?: number };
 };
 
 type ParsedMovieResult = {
@@ -31,10 +39,11 @@ type ParsedMovieResult = {
 };
 
 function parseJsonSafely(content: string): ParsedMovieResult | null {
+  const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   try {
-    return JSON.parse(content.trim());
+    return JSON.parse(cleaned);
   } catch {
-    const match = content.match(/\{[\s\S]*\}/);
+    const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
       try {
         return JSON.parse(match[0]);
@@ -52,9 +61,9 @@ router.post("/identify", async (req, res) => {
     return;
   }
 
-  const apiKey = process.env["OPENAI_API_KEY"];
+  const apiKey = process.env["GEMINI_API_KEY"];
   if (!apiKey) {
-    req.log.error("OPENAI_API_KEY environment variable is not set");
+    req.log.error("GEMINI_API_KEY environment variable is not set");
     res
       .status(500)
       .json({ error: "Movie identification service is not configured on the server" });
@@ -62,11 +71,11 @@ router.post("/identify", async (req, res) => {
   }
 
   const prompt = url
-    ? `You are a world-class movie identification expert with encyclopedic knowledge of films, TV shows, and viral content from TikTok and social media.
+    ? `You are a world-class movie identification expert with encyclopedic knowledge of films, TV shows, and viral social media content.
 
 A user shared this video URL: "${url}"
 
-Analyze the URL structure, domain, path segments, and any embedded metadata or slugs. TikTok movie explainer clips often contain movie names or scene keywords in their captions or creator handles. Use all available clues.
+Analyze the URL structure, domain, path segments, and any embedded metadata or slugs. TikTok movie explainer clips often contain movie names or scene keywords in the URL path, captions, or creator handles. Use all available clues from the URL itself.
 
 Return a JSON object with these exact keys:
 - "title": The movie or TV show name (be specific and accurate)
@@ -93,37 +102,42 @@ Identify the most likely movie or TV show. Return a JSON object with these exact
 Return ONLY valid JSON. No markdown fences, no explanation.`;
 
   try {
-    const openaiRes = await fetch(OPENAI_API_URL, {
+    const geminiRes = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.3,
-        max_tokens: 500,
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 500,
+        },
       }),
     });
 
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
-      req.log.error({ status: openaiRes.status, body: errText }, "OpenAI API error");
-      if (openaiRes.status === 401) {
-        res.status(500).json({ error: "Invalid OpenAI API key on server" });
+    const data = (await geminiRes.json()) as GeminiResponse;
+
+    if (!geminiRes.ok) {
+      const errMsg = data.error?.message ?? "Gemini API error";
+      req.log.error({ status: geminiRes.status, error: errMsg }, "Gemini API error");
+      if (geminiRes.status === 400 && data.error?.message?.includes("API key")) {
+        res.status(500).json({ error: "Invalid Gemini API key on server" });
       } else {
         res.status(500).json({ error: "Failed to contact identification service" });
       }
       return;
     }
 
-    const data = (await openaiRes.json()) as OpenAIResponse;
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+    if (!content) {
+      req.log.error({ data }, "Empty response from Gemini");
+      res.status(500).json({ error: "No response from identification service" });
+      return;
+    }
 
     const parsed = parseJsonSafely(content);
     if (!parsed) {
-      req.log.error({ content }, "Could not parse OpenAI response");
+      req.log.error({ content }, "Could not parse Gemini response as JSON");
       res.status(500).json({ error: "Could not parse identification result" });
       return;
     }
@@ -140,7 +154,7 @@ Return ONLY valid JSON. No markdown fences, no explanation.`;
       confidence,
     });
   } catch (err) {
-    req.log.error({ err }, "Error calling OpenAI");
+    req.log.error({ err }, "Error calling Gemini");
     res.status(500).json({ error: "Movie identification failed. Please try again." });
   }
 });
