@@ -2,16 +2,16 @@
  * Movie identification service.
  *
  * All requests go to our own Express backend (/api/identify), which
- * holds the OpenAI API key server-side. The key is never exposed to the client.
+ * holds the Gemini API key server-side. The key is never exposed to the client.
  *
- * The backend requires OPENAI_API_KEY to be set in its environment.
+ * The backend requires GEMINI_API_KEY to be set in its environment.
  */
 
 import type { MovieResult } from "@/types/movie";
 
 const BASE_URL = process.env["EXPO_PUBLIC_DOMAIN"]
   ? `https://${process.env["EXPO_PUBLIC_DOMAIN"]}`
-  : "";
+  : "https://movie-ai-qgwy.onrender.com";
 
 function makeId(): string {
   return Date.now().toString() + Math.random().toString(36).slice(2, 9);

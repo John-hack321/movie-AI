@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "movie-finder",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
@@ -17,7 +16,8 @@
       "supportsTablet": false
     },
     "android": {
-      "backgroundColor": "#0C0C0F"
+      "backgroundColor": "#0C0C0F",
+      "package": "com.cineid.moviefinder"
     },
     "web": {
       "favicon": "./assets/images/icon.png",

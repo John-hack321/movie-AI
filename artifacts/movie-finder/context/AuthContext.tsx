@@ -11,6 +11,8 @@ import React, {
 
 import {
   GOOGLE_WEB_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_ANDROID_CLIENT_ID,
 } from "@/constants/appwrite";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -58,8 +60,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = useCallback(async () => {
+    // Get the appropriate client ID for the platform
+    const getGoogleClientId = () => {
+      if (GOOGLE_WEB_CLIENT_ID) return GOOGLE_WEB_CLIENT_ID;
+      if (GOOGLE_IOS_CLIENT_ID) return GOOGLE_IOS_CLIENT_ID;
+      if (GOOGLE_ANDROID_CLIENT_ID) return GOOGLE_ANDROID_CLIENT_ID;
+      return "";
+    };
+
+    const clientId = getGoogleClientId();
+    
     // If no Google client ID is configured, fall back to demo/guest mode
-    if (!GOOGLE_WEB_CLIENT_ID) {
+    if (!clientId) {
       const guest: AuthUser = {
         id: "guest_" + Date.now().toString(),
         name: "Guest User",
@@ -72,11 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true);
     try {
-      const redirectUri = Linking.createURL("auth");
+      const redirectUri = "exp://127.0.0.1:8081/--/auth";
       const scope = encodeURIComponent("openid profile email");
       const googleAuthUrl =
         `https://accounts.google.com/o/oauth2/v2/auth` +
-        `?client_id=${encodeURIComponent(GOOGLE_WEB_CLIENT_ID)}` +
+        `?client_id=${encodeURIComponent(clientId)}` +
         `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&response_type=token` +
         `&scope=${scope}`;
@@ -86,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (result.type === "success" && result.url) {
         const fragment = result.url.split("#")[1] ?? "";
         const params = Object.fromEntries(
-          fragment.split("&").map((p) => {
+          fragment.split("&").map((p: string) => {
             const [k, v] = p.split("=");
             return [k, decodeURIComponent(v ?? "")];
           })
