@@ -19,7 +19,7 @@ import { Router } from "express";
 const router = Router();
 
 const GEMINI_MODEL = "gemini-1.5-flash";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent`;
 
 type GeminiResponse = {
   candidates?: Array<{
